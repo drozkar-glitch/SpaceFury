@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -72,6 +73,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -124,7 +126,6 @@ fun App() {
             engine.crossbarShieldEnabled = crossbarShield
         }
 
-        // 60/120 FPS herní smyčka
         LaunchedEffect(screen) {
             if (screen != AppScreen.PLAYING) return@LaunchedEffect
             var lastNanos = 0L
@@ -283,7 +284,6 @@ private fun MainMenuScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
         ) {
-            // Vektorový emblém rakety A
             Box(
                 modifier = Modifier
                     .size(112.dp)
@@ -329,34 +329,42 @@ private fun MainMenuScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 14.dp),
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 12.dp)
+                    ) {
                         Text(
                             text = "PILOT",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = pilotNick.ifBlank { "Host (offline režim)" },
+                            text = pilotNick.ifBlank { "Host (offline)" },
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
                             text = "NEJLEPŠÍ SKÓRE",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
                         )
                         Text(
                             text = formatArcadeScore(bestScore),
                             fontFamily = FontFamily.Monospace,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1
                         )
                     }
                 }
@@ -393,19 +401,35 @@ private fun MainMenuScreen(
                     onClick = onOpenAccount,
                     modifier = Modifier
                         .weight(1f)
-                        .height(50.dp),
+                        .heightIn(min = 52.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 12.dp),
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    Text("ÚČET PILOTA", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "ÚČET PILOTA",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
                 OutlinedButton(
                     onClick = onOpenSettings,
                     modifier = Modifier
                         .weight(1f)
-                        .height(50.dp),
+                        .heightIn(min = 52.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 12.dp),
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    Text("NASTAVENÍ", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "NASTAVENÍ",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
 
@@ -492,7 +516,6 @@ private fun GamePlayScreen(
         val isLandscape = maxWidth > maxHeight * 1.15f
 
         Column(modifier = Modifier.fillMaxSize()) {
-            // Kompaktní horní ovládací lišta kabinetu
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -550,7 +573,7 @@ private fun GamePlayScreen(
                         modifier = Modifier
                             .width(175.dp)
                             .fillMaxHeight(),
-                        contentAlignment = Alignment.Center
+                            contentAlignment = Alignment.Center
                     ) {
                         RightControlsCluster(engine = engine, verticalLayout = true)
                     }
@@ -1023,7 +1046,11 @@ private fun PilotAccountScreen(
                     res.onSuccess { entry ->
                         onAccountUpdated(entry.nick, pin.trim(), entry.score, entry.wave)
                         credentialBridge.saveCredentials(entry.nick, pin.trim())
-                        statusMessage = "Účet pilota '${entry.nick}' je aktivní a synchronizovaný."
+                        statusMessage = if (entry.score > 0) {
+                            "Účet '${entry.nick}' je aktivní a skóre ${formatArcadeScore(entry.score)} je v TOP 50."
+                        } else {
+                            "Účet '${entry.nick}' je uložen. Jakmile nahraješ první body, zapíší se do TOP 50."
+                        }
                     }.onFailure { err ->
                         statusMessage = err.message ?: "Přihlášení se nezdařilo."
                     }

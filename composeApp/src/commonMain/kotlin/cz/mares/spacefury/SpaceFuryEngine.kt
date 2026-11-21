@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.sin
 import kotlin.random.Random
@@ -32,7 +33,7 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
 
     var commanderMessage by mutableStateOf("TAKŽE PILOT S VESMÍRNÝM ÁČKEM? DO BOJE!")
         private set
-    var dockingCountdown by mutableStateOf(14.0f)
+    var dockingCountdown by mutableStateOf(16.0f)
         private set
     var frameTick by mutableIntStateOf(0)
         private set
@@ -62,10 +63,10 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
     var stickAngleDeg: Float? = null
     var stickMagnitude: Float = 0f
 
-    private var phaseTimer = 2.9f
+    private var phaseTimer = 3.1f
     private var fireCooldown = 0f
     private var thrustSfxTimer = 0f
-    private var dockBeepSecond = 14
+    private var dockBeepSecond = 16
     private var nextEntityId = 1
     private var waveClearDelay = 0f
     private var bonusLifeNextScore = 15000
@@ -85,7 +86,7 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
         dockingPods.clear()
 
         ship.x = ARENA_W * 0.5f
-        ship.y = ARENA_H * 0.62f
+        ship.y = ARENA_H * 0.64f
         ship.vx = 0f
         ship.vy = 0f
         ship.angleDeg = -90f
@@ -93,20 +94,20 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
         ship.secondaryShell = null
         ship.crossbarDamaged = false
         ship.crossbarBlinkTimer = 0f
-        ship.invulnTimer = 2.0f
+        ship.invulnTimer = 2.2f
         ship.alive = true
         ship.respawnTimer = 0f
 
         commanderMessage = "TAKŽE PILOT S VESMÍRNÝM ÁČKEM? DO BOJE!"
         phase = GamePhase.COMMANDER_INTRO
-        phaseTimer = 2.9f
+        phaseTimer = 3.1f
         sound.playSfx(SfxType.ALIEN_INTRO_FANFARE)
         sound.speakAlien(AlienSpeechId.INTRO)
     }
 
     fun step(rawDt: Float) {
         if (isPaused) return
-        val dt = rawDt.coerceIn(0.001f, 0.05f)
+        val dt = rawDt.coerceIn(0.001f, 0.04f)
         elapsedSec += dt
         frameTick++
 
@@ -148,11 +149,13 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
 
         if (ship.x < 120f || ship.x > ARENA_W - 120f || ship.y < 120f || ship.y > ARENA_H - 120f) {
             ship.x = ARENA_W * 0.5f
-            ship.y = ARENA_H * 0.58f
+            ship.y = ARENA_H * 0.62f
         }
-        ship.invulnTimer = maxOf(ship.invulnTimer, 1.8f)
+        ship.vx *= 0.35f
+        ship.vy *= 0.35f
+        ship.invulnTimer = maxOf(ship.invulnTimer, 2.0f)
 
-        val groupCount = (3 + wave).coerceAtMost(8)
+        val groupCount = (2 + wave).coerceAtMost(7)
         for (g in 0 until groupCount) {
             spawnAssemblyGroup(g, groupCount)
         }
@@ -167,16 +170,16 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
             else -> EnemyArchetype.SCOUT
         }
 
-        val angle = (2.0 * PI * index.toDouble() / total.coerceAtLeast(1)) + rng.nextFloat() * 0.45
-        val targetX = (ARENA_W * 0.5f + cos(angle).toFloat() * 255f).coerceIn(140f, ARENA_W - 140f)
-        val targetY = (ARENA_H * 0.42f + sin(angle).toFloat() * 175f).coerceIn(120f, ARENA_H - 150f)
+        val angle = (2.0 * PI * index.toDouble() / total.coerceAtLeast(1)) + rng.nextFloat() * 0.38
+        val targetX = (ARENA_W * 0.5f + cos(angle).toFloat() * 240f).coerceIn(145f, ARENA_W - 145f)
+        val targetY = (ARENA_H * 0.38f + sin(angle).toFloat() * 155f).coerceIn(115f, ARENA_H - 195f)
 
         val kinds = EnemyPartKind.entries
         for (kIdx in kinds.indices) {
-            val edgeAngle = angle + (kIdx - 1) * 0.65
-            val startX = (ARENA_W * 0.5f + cos(edgeAngle).toFloat() * 520f).coerceIn(12f, ARENA_W - 12f)
-            val startY = (ARENA_H * 0.5f + sin(edgeAngle).toFloat() * 410f).coerceIn(12f, ARENA_H - 12f)
-            val speed = 78f + wave * 11f + kIdx * 9f
+            val edgeAngle = angle + (kIdx - 1) * 0.72
+            val startX = (ARENA_W * 0.5f + cos(edgeAngle).toFloat() * 485f).coerceIn(16f, ARENA_W - 16f)
+            val startY = (ARENA_H * 0.45f + sin(edgeAngle).toFloat() * 375f).coerceIn(16f, ARENA_H - 16f)
+            val speed = 44f + (wave - 1) * 5.5f + kIdx * 4f
             val dx = targetX - startX
             val dy = targetY - startY
             val dist = hypot(dx, dy).coerceAtLeast(1f)
@@ -200,28 +203,28 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
 
     private fun enterDockingPhase() {
         phase = GamePhase.DOCKING
-        dockingCountdown = 14.0f
-        dockBeepSecond = 14
+        dockingCountdown = 16.0f
+        dockBeepSecond = 16
         bullets.clear()
         enemyParts.clear()
         enemies.clear()
 
         ship.x = ARENA_W * 0.5f
-        ship.y = ARENA_H * 0.72f
+        ship.y = ARENA_H * 0.74f
         ship.vx = 0f
         ship.vy = 0f
         ship.angleDeg = -90f
         ship.isThrusting = false
 
         dockingPods.clear()
-        dockingPods.add(DockingPod(ShellType.SPREAD, ARENA_W * 0.22f, 220f))
-        dockingPods.add(DockingPod(ShellType.CANNON, ARENA_W * 0.50f, 175f))
-        dockingPods.add(DockingPod(ShellType.DUAL_AXIS, ARENA_W * 0.78f, 220f))
+        dockingPods.add(DockingPod(ShellType.SPREAD, ARENA_W * 0.22f, 225f))
+        dockingPods.add(DockingPod(ShellType.CANNON, ARENA_W * 0.50f, 180f))
+        dockingPods.add(DockingPod(ShellType.DUAL_AXIS, ARENA_W * 0.78f, 225f))
     }
 
     private fun enterCommanderTaunt() {
         phase = GamePhase.COMMANDER_TAUNT
-        phaseTimer = 2.4f
+        phaseTimer = 2.6f
         val pick = wave % 3
         when (pick) {
             1 -> {
@@ -249,8 +252,8 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
         }
 
         for (pod in dockingPods) {
-            pod.pulsePhase += dt * 4.2f
-            if (pod.available && hypot(ship.x - pod.x, ship.y - pod.y) < 54f) {
+            pod.pulsePhase += dt * 3.2f
+            if (pod.available && hypot(ship.x - pod.x, ship.y - pod.y) < 56f) {
                 pod.available = false
                 if (ship.primaryShell == null) {
                     ship.primaryShell = pod.shellType
@@ -261,7 +264,7 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
                 }
                 ship.crossbarDamaged = false
                 ship.crossbarBlinkTimer = 0f
-                spawnExplosionDebris(pod.x, pod.y, count = 16, colorCode = 2, speedScale = 0.85f)
+                spawnExplosionDebris(pod.x, pod.y, count = 16, colorCode = 2, speedScale = 0.72f)
                 sound.playSfx(SfxType.DOCK_LOCK)
                 sound.vibrate(heavy = true)
                 enterCommanderTaunt()
@@ -286,13 +289,13 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
                 if (lives > 0) {
                     ship.alive = true
                     ship.x = ARENA_W * 0.5f
-                    ship.y = ARENA_H * 0.56f
+                    ship.y = ARENA_H * 0.60f
                     ship.vx = 0f
                     ship.vy = 0f
                     ship.angleDeg = -90f
                     ship.crossbarDamaged = false
                     ship.crossbarBlinkTimer = 0f
-                    ship.invulnTimer = 2.6f
+                    ship.invulnTimer = 2.8f
                 } else {
                     phase = GamePhase.GAME_OVER
                     commanderMessage = "HA HA HA! TVOJE RAKETA JE PRACH VESMÍRU!"
@@ -309,7 +312,7 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
 
         if (enemyParts.isEmpty() && enemies.isEmpty() && ship.alive) {
             waveClearDelay += dt
-            if (waveClearDelay >= 1.05f) {
+            if (waveClearDelay >= 1.2f) {
                 addPoints(500 * wave)
                 if (ship.primaryShell == null || ship.secondaryShell == null || ship.crossbarDamaged) {
                     enterDockingPhase()
@@ -324,13 +327,13 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
         val stickAngle = stickAngleDeg
         if (stickAngle != null && stickMagnitude > 0.14f) {
             var diff = ((stickAngle - ship.angleDeg + 540f) % 360f) - 180f
-            val maxTurn = 310f * dt
+            val maxTurn = 220f * dt
             if (diff > maxTurn) diff = maxTurn
             if (diff < -maxTurn) diff = -maxTurn
             ship.angleDeg = (ship.angleDeg + diff + 360f) % 360f
-            ship.isThrusting = stickMagnitude > 0.42f || inputThrust
+            ship.isThrusting = stickMagnitude > 0.45f || inputThrust
         } else {
-            val turnSpeed = 235f
+            val turnSpeed = 175f
             if (inputLeft) ship.angleDeg -= turnSpeed * dt
             if (inputRight) ship.angleDeg += turnSpeed * dt
             ship.isThrusting = inputThrust
@@ -338,25 +341,26 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
 
         if (ship.isThrusting) {
             val rad = ship.angleDeg * (PI.toFloat() / 180f)
-            val accel = 370f
+            val accel = 215f
             ship.vx += cos(rad) * accel * dt
             ship.vy += sin(rad) * accel * dt
             val speed = hypot(ship.vx, ship.vy)
-            val maxSpeed = 385f
+            val maxSpeed = 230f
             if (speed > maxSpeed) {
                 ship.vx = (ship.vx / speed) * maxSpeed
                 ship.vy = (ship.vy / speed) * maxSpeed
             }
             thrustSfxTimer -= dt
             if (thrustSfxTimer <= 0f) {
-                thrustSfxTimer = 0.12f
+                thrustSfxTimer = 0.14f
                 sound.playSfx(SfxType.THRUST)
             }
         } else {
             thrustSfxTimer = 0f
         }
 
-        val drag = 1f - 0.62f * dt
+        // Časově spojité přibrzďování nezávislé na 60/120 Hz
+        val drag = exp(-0.85f * dt)
         ship.vx *= drag
         ship.vy *= drag
         ship.x += ship.vx * dt
@@ -377,9 +381,9 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
         val hasDualAxis = ship.primaryShell == ShellType.DUAL_AXIS || ship.secondaryShell == ShellType.DUAL_AXIS
         val isSuper = ship.primaryShell != null && ship.secondaryShell != null
 
-        fireCooldown = if (isSuper) 0.14f else if (ship.primaryShell != null) 0.16f else 0.18f
+        fireCooldown = if (isSuper) 0.16f else if (ship.primaryShell != null) 0.18f else 0.21f
         val baseRad = ship.angleDeg * (PI.toFloat() / 180f)
-        val shotSpeed = 640f
+        val shotSpeed = 480f
 
         fun emitBolt(offsetDeg: Float, lateralOffset: Float, colorCode: Int) {
             val r = (ship.angleDeg + offsetDeg) * (PI.toFloat() / 180f)
@@ -392,7 +396,7 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
                     y = sy,
                     vx = cos(r) * shotSpeed + ship.vx * 0.25f,
                     vy = sin(r) * shotSpeed + ship.vy * 0.25f,
-                    life = 0.92f,
+                    life = 1.15f,
                     fromPlayer = true,
                     colorCode = colorCode
                 )
@@ -437,26 +441,27 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
 
     private fun updateEnemyParts(dt: Float) {
         for (p in enemyParts) {
-            p.spinDeg = (p.spinDeg + 150f * dt) % 360f
+            p.spinDeg = (p.spinDeg + 95f * dt) % 360f
             if (p.isRogue) {
                 val dx = ship.x - p.x
                 val dy = ship.y - p.y
                 val d = hypot(dx, dy).coerceAtLeast(1f)
-                val spd = 145f + wave * 10f
-                p.vx = p.vx * 0.96f + (dx / d) * spd * 0.04f
-                p.vy = p.vy * 0.96f + (dy / d) * spd * 0.04f
+                val spd = 82f + (wave - 1) * 7f
+                val blend = (1.15f * dt).coerceIn(0f, 1f)
+                p.vx += ((dx / d) * spd - p.vx) * blend
+                p.vy += ((dy / d) * spd - p.vy) * blend
                 p.x = wrapCoord(p.x + p.vx * dt, ARENA_W)
                 p.y = wrapCoord(p.y + p.vy * dt, ARENA_H)
             } else if (!p.arrived) {
                 val dx = p.targetX - p.x
                 val dy = p.targetY - p.y
                 val dist = hypot(dx, dy)
-                if (dist <= 16f) {
+                if (dist <= 12f) {
                     p.x = p.targetX
                     p.y = p.targetY
                     p.arrived = true
                 } else {
-                    val spd = 92f + wave * 12f
+                    val spd = 48f + (wave - 1) * 6f
                     p.vx = (dx / dist) * spd
                     p.vy = (dy / dist) * spd
                     p.x += p.vx * dt
@@ -472,7 +477,7 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
                 val sample = members[0]
                 enemyParts.removeAll { it.groupId == gid }
                 val baseAngle = rng.nextFloat() * 2f * PI.toFloat()
-                val spd = 98f + wave * 13f
+                val spd = 64f + (wave - 1) * 7.5f
                 enemies.add(
                     EnemyWarship(
                         id = nextEntityId++,
@@ -482,7 +487,7 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
                         vx = cos(baseAngle) * spd,
                         vy = sin(baseAngle) * spd,
                         hp = if (sample.archetype == EnemyArchetype.DESTROYER) 2 else 1,
-                        fireCooldown = 0.9f + rng.nextFloat() * 1.1f
+                        fireCooldown = 1.4f + rng.nextFloat() * 1.4f
                     )
                 )
                 sound.playSfx(SfxType.ENEMY_ASSEMBLE)
@@ -496,30 +501,32 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
 
     private fun updateEnemies(dt: Float) {
         for (e in enemies) {
-            e.angleDeg = (e.angleDeg + 115f * dt) % 360f
+            e.angleDeg = (e.angleDeg + 68f * dt) % 360f
             if (e.hitFlash > 0f) e.hitFlash = (e.hitFlash - dt).coerceAtLeast(0f)
 
             if (ship.alive) {
                 val dx = ship.x - e.x
                 val dy = ship.y - e.y
                 val dist = hypot(dx, dy).coerceAtLeast(1f)
-                val chaseWeight = if (e.archetype == EnemyArchetype.STAR_HUNTER) 0.045f else 0.018f
-                val targetSpd = 115f + wave * 14f
-                e.vx = e.vx * (1f - chaseWeight) + (dx / dist) * targetSpd * chaseWeight
-                e.vy = e.vy * (1f - chaseWeight) + (dy / dist) * targetSpd * chaseWeight
+                // Navádění plně násobené dt (stejná rychlost na 60 Hz i 120 Hz)
+                val chaseRate = if (e.archetype == EnemyArchetype.STAR_HUNTER) 1.35f else 0.62f
+                val blend = (chaseRate * dt).coerceIn(0f, 1f)
+                val targetSpd = 68f + (wave - 1) * 8f
+                e.vx += ((dx / dist) * targetSpd - e.vx) * blend
+                e.vy += ((dy / dist) * targetSpd - e.vy) * blend
 
                 e.fireCooldown -= dt
                 if (e.fireCooldown <= 0f && phase == GamePhase.COMBAT) {
-                    e.fireCooldown = (2.35f - wave * 0.14f).coerceAtLeast(1.05f) + rng.nextFloat() * 0.8f
-                    val aimAngle = atan2(dy, dx) + (rng.nextFloat() - 0.5f) * 0.24f
-                    val bSpeed = 290f + wave * 18f
+                    e.fireCooldown = (3.15f - (wave - 1) * 0.16f).coerceAtLeast(1.45f) + rng.nextFloat() * 1.05f
+                    val aimAngle = atan2(dy, dx) + (rng.nextFloat() - 0.5f) * 0.28f
+                    val bSpeed = 185f + (wave - 1) * 12f
                     bullets.add(
                         LaserBolt(
                             x = e.x,
                             y = e.y,
                             vx = cos(aimAngle) * bSpeed,
                             vy = sin(aimAngle) * bSpeed,
-                            life = 2.1f,
+                            life = 2.6f,
                             fromPlayer = false,
                             colorCode = 3
                         )
@@ -536,17 +543,17 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
     private fun checkCollisions() {
         val pBullets = bullets.filter { it.fromPlayer }
         for (b in pBullets) {
-            val hitPart = enemyParts.firstOrNull { hypot(it.x - b.x, it.y - b.y) < 22f }
+            val hitPart = enemyParts.firstOrNull { hypot(it.x - b.x, it.y - b.y) < 23f }
             if (hitPart != null) {
                 bullets.remove(b)
                 enemyParts.remove(hitPart)
                 addPoints(hitPart.archetype.partPoints)
-                spawnExplosionDebris(hitPart.x, hitPart.y, count = 8, colorCode = 1, speedScale = 0.7f)
+                spawnExplosionDebris(hitPart.x, hitPart.y, count = 8, colorCode = 1, speedScale = 0.62f)
                 sound.playSfx(SfxType.ENEMY_PART_HIT)
                 continue
             }
 
-            val hitEnemy = enemies.firstOrNull { hypot(it.x - b.x, it.y - b.y) < 30f }
+            val hitEnemy = enemies.firstOrNull { hypot(it.x - b.x, it.y - b.y) < 31f }
             if (hitEnemy != null) {
                 bullets.remove(b)
                 hitEnemy.hp -= 1
@@ -554,7 +561,7 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
                 if (hitEnemy.hp <= 0) {
                     enemies.remove(hitEnemy)
                     addPoints(hitEnemy.archetype.points)
-                    spawnExplosionDebris(hitEnemy.x, hitEnemy.y, count = 18, colorCode = 3, speedScale = 1.0f)
+                    spawnExplosionDebris(hitEnemy.x, hitEnemy.y, count = 18, colorCode = 3, speedScale = 0.82f)
                     sound.playSfx(SfxType.EXPLOSION_SMALL)
                     sound.vibrate(heavy = false)
                 } else {
@@ -564,7 +571,7 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
         }
 
         if (!ship.alive || ship.invulnTimer > 0f) return
-        val hitRadius = if (ship.primaryShell != null) 25f else 18f
+        val hitRadius = if (ship.primaryShell != null) 24f else 17f
 
         val enemyShot = bullets.firstOrNull { !it.fromPlayer && hypot(it.x - ship.x, it.y - ship.y) < hitRadius }
         if (enemyShot != null) {
@@ -573,18 +580,18 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
             return
         }
 
-        val crashPart = enemyParts.firstOrNull { hypot(it.x - ship.x, it.y - ship.y) < hitRadius + 14f }
+        val crashPart = enemyParts.firstOrNull { hypot(it.x - ship.x, it.y - ship.y) < hitRadius + 13f }
         if (crashPart != null) {
             enemyParts.remove(crashPart)
-            spawnExplosionDebris(crashPart.x, crashPart.y, 10, 1, 0.8f)
+            spawnExplosionDebris(crashPart.x, crashPart.y, 10, 1, 0.7f)
             handlePlayerHit()
             return
         }
 
-        val crashShip = enemies.firstOrNull { hypot(it.x - ship.x, it.y - ship.y) < hitRadius + 22f }
+        val crashShip = enemies.firstOrNull { hypot(it.x - ship.x, it.y - ship.y) < hitRadius + 21f }
         if (crashShip != null) {
             enemies.remove(crashShip)
-            spawnExplosionDebris(crashShip.x, crashShip.y, 16, 3, 1.0f)
+            spawnExplosionDebris(crashShip.x, crashShip.y, 16, 3, 0.85f)
             handlePlayerHit()
         }
     }
@@ -592,9 +599,9 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
     private fun handlePlayerHit() {
         if (ship.secondaryShell != null) {
             ship.secondaryShell = null
-            ship.invulnTimer = 2.2f
-            ship.crossbarBlinkTimer = 2.8f
-            spawnExplosionDebris(ship.x, ship.y, count = 16, colorCode = 2, speedScale = 0.9f)
+            ship.invulnTimer = 2.4f
+            ship.crossbarBlinkTimer = 3.2f
+            spawnExplosionDebris(ship.x, ship.y, count = 16, colorCode = 2, speedScale = 0.78f)
             sound.playSfx(SfxType.SHELL_STRIPPED)
             sound.vibrate(heavy = true)
             return
@@ -602,9 +609,9 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
 
         if (ship.primaryShell != null) {
             ship.primaryShell = null
-            ship.invulnTimer = 2.4f
-            ship.crossbarBlinkTimer = 3.4f
-            spawnExplosionDebris(ship.x, ship.y, count = 18, colorCode = 1, speedScale = 0.95f)
+            ship.invulnTimer = 2.6f
+            ship.crossbarBlinkTimer = 3.8f
+            spawnExplosionDebris(ship.x, ship.y, count = 18, colorCode = 1, speedScale = 0.82f)
             sound.playSfx(SfxType.SHELL_STRIPPED)
             sound.vibrate(heavy = true)
             return
@@ -612,9 +619,9 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
 
         if (crossbarShieldEnabled && !ship.crossbarDamaged) {
             ship.crossbarDamaged = true
-            ship.invulnTimer = 2.3f
-            ship.crossbarBlinkTimer = 4.0f
-            spawnExplosionDebris(ship.x, ship.y, count = 10, colorCode = 2, speedScale = 0.7f)
+            ship.invulnTimer = 2.5f
+            ship.crossbarBlinkTimer = 4.5f
+            spawnExplosionDebris(ship.x, ship.y, count = 10, colorCode = 2, speedScale = 0.65f)
             sound.playSfx(SfxType.SHELL_STRIPPED)
             sound.vibrate(heavy = true)
             return
@@ -622,9 +629,9 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
 
         ship.alive = false
         lives = (lives - 1).coerceAtLeast(0)
-        ship.respawnTimer = 2.2f
+        ship.respawnTimer = 2.3f
         spawnShipADisintegration(ship.x, ship.y, ship.angleDeg)
-        spawnExplosionDebris(ship.x, ship.y, count = 24, colorCode = 0, speedScale = 1.15f)
+        spawnExplosionDebris(ship.x, ship.y, count = 24, colorCode = 0, speedScale = 0.92f)
         sound.playSfx(SfxType.EXPLOSION_BIG)
         sound.vibrate(heavy = true)
     }
@@ -636,13 +643,13 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
                 VectorDebrisLine(
                     x = cx,
                     y = cy,
-                    vx = cos(dir) * 58f,
-                    vy = sin(dir) * 58f,
+                    vx = cos(dir) * 44f,
+                    vy = sin(dir) * 44f,
                     angleDeg = angleDeg + i * 55f,
-                    spinSpeed = if (i % 2 == 0) 140f else -155f,
+                    spinSpeed = if (i % 2 == 0) 105f else -120f,
                     halfLen = if (i == 2) 13f else 22f,
-                    life = 1.9f,
-                    maxLife = 1.9f,
+                    life = 2.1f,
+                    maxLife = 2.1f,
                     colorCode = if (i == 2) 2 else 0
                 )
             )
@@ -652,8 +659,8 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
     private fun spawnExplosionDebris(cx: Float, cy: Float, count: Int, colorCode: Int, speedScale: Float) {
         for (i in 0 until count) {
             val a = (2f * PI.toFloat() * i / count.coerceAtLeast(1)) + rng.nextFloat() * 0.35f
-            val spd = (65f + rng.nextFloat() * 165f) * speedScale
-            val life = 0.45f + rng.nextFloat() * 0.65f
+            val spd = (52f + rng.nextFloat() * 135f) * speedScale
+            val life = 0.55f + rng.nextFloat() * 0.70f
             debris.add(
                 VectorDebrisLine(
                     x = cx,
@@ -661,7 +668,7 @@ class SpaceFuryEngine(private val sound: RetroSoundEngine) {
                     vx = cos(a) * spd,
                     vy = sin(a) * spd,
                     angleDeg = rng.nextFloat() * 360f,
-                    spinSpeed = (rng.nextFloat() - 0.5f) * 380f,
+                    spinSpeed = (rng.nextFloat() - 0.5f) * 280f,
                     halfLen = 6f + rng.nextFloat() * 10f,
                     life = life,
                     maxLife = life,

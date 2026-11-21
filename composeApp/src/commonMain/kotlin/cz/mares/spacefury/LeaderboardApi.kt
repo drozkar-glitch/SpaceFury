@@ -5,12 +5,12 @@ data class LeaderboardEntry(
     val nick: String,
     val score: Int,
     val wave: Int,
-    val pinHash: String = ""
+    val deviceId: String = ""
 )
 
 object LeaderboardApi {
     private const val BASE_URL = "https://mares-games-default-rtdb.europe-west1.firebasedatabase.app"
-    private const val NODE = "spacefury_scores"
+    private const val GAME_PATH = "high_scores/space_fury"
 
     fun normalizeKey(nick: String): String {
         val cleaned = buildString {
@@ -37,18 +37,18 @@ object LeaderboardApi {
         return cleaned.take(24)
     }
 
-    fun hashPin(nick: String, pin: String): String {
-        val raw = "${normalizeKey(nick)}:${pin.trim()}:sf1981"
+    fun deriveDeviceId(nick: String, pin: String): String {
+        val raw = "${normalizeKey(nick)}:${pin.trim()}:sf1981_id"
         var h = -3750763034362895579L
         for (b in raw.encodeToByteArray()) {
             h = h xor (b.toLong() and 0xFFL)
             h *= 1099511628211L
         }
-        return h.toULong().toString(16).padStart(16, '0')
+        return "sf_" + h.toULong().toString(16).padStart(16, '0')
     }
 
     suspend fun fetchTop50(net: PlatformNetStorage): List<LeaderboardEntry> {
-        val res = net.httpRequest("GET", "$BASE_URL/$NODE.json")
+        val res = net.httpRequest("GET", "$BASE_URL/$GAME_PATH.json")
         if (res.code !in 200..299 || res.body.isBlank() || res.body.trim() == "null") {
             return emptyList()
         }
@@ -74,36 +74,70 @@ object LeaderboardApi {
             return Result.failure(IllegalArgumentException("PIN nebo heslo musí mít alespoň 4 znaky."))
         }
 
-        val expectedHash = hashPin(cleanNick, pin)
-        val existingRes = net.httpRequest("GET", "$BASE_URL/$NODE/$key.json")
+        val expectedDeviceId = deriveDeviceId(cleanNick, pin)
+        val existingRes = net.httpRequest("GET", "$BASE_URL/$GAME_PATH/$key.json")
         if (existingRes.code == 0) {
             return Result.failure(IllegalStateException("Nelze se spojit se serverem žebříčku."))
         }
 
-        val existing = if (existingRes.body.isNotBlank() && existingRes.body.trim() != "null") {
+        val existing = if (existingRes.code in 200..299 &&
+            existingRes.body.isNotBlank() &&
+            existingRes.body.trim() != "null" &&
+            existingRes.body.trim().startsWith("{")
+        ) {
             parseSingleObject(key, existingRes.body)
         } else {
             null
         }
 
-        if (existing != null && existing.pinHash.isNotBlank() && existing.pinHash != expectedHash) {
-            return Result.failure(IllegalArgumentException("Tato přezdívka je již obsazená jiným PINem."))
+        if (existing != null && existing.deviceId.isNotBlank() && existing.deviceId != expectedDeviceId) {
+            return Result.failure(IllegalArgumentException("Tato přezdívka je již chráněná jiným PINem."))
         }
 
-        val mergedScore = maxOf(localBestScore, existing?.score ?: 0)
-        val mergedWave = maxOf(localBestWave, existing?.wave ?: 1)
-        val entry = LeaderboardEntry(
-            key = key,
-            nick = existing?.nick?.ifBlank { cleanNick } ?: cleanNick,
-            score = mergedScore,
-            wave = mergedWave,
-            pinHash = expectedHash
-        )
-        val putRes = net.httpRequest("PUT", "$BASE_URL/$NODE/$key.json", toJson(entry))
-        if (putRes.code !in 200..299) {
-            return Result.failure(IllegalStateException("Uložení účtu se nezdařilo (HTTP ${putRes.code})."))
+        val mergedWave = maxOf(1, maxOf(localBestWave, existing?.wave ?: 1))
+
+        if (existing != null) {
+            if (localBestScore > existing.score) {
+                val updated = LeaderboardEntry(
+                    key = key,
+                    nick = existing.nick.ifBlank { cleanNick },
+                    score = localBestScore,
+                    wave = mergedWave,
+                    deviceId = expectedDeviceId
+                )
+                val putRes = net.httpRequest("PUT", "$BASE_URL/$GAME_PATH/$key.json", toJson(updated))
+                if (putRes.code !in 200..299) {
+                    return Result.failure(IllegalStateException("Zápis skóre zamítnut (HTTP ${putRes.code})."))
+                }
+                return Result.success(updated)
+            }
+            return Result.success(existing.copy(deviceId = expectedDeviceId))
         }
-        return Result.success(entry)
+
+        if (localBestScore > 0) {
+            val fresh = LeaderboardEntry(
+                key = key,
+                nick = cleanNick,
+                score = localBestScore,
+                wave = mergedWave,
+                deviceId = expectedDeviceId
+            )
+            val putRes = net.httpRequest("PUT", "$BASE_URL/$GAME_PATH/$key.json", toJson(fresh))
+            if (putRes.code !in 200..299) {
+                return Result.failure(IllegalStateException("Uložení do databáze selhalo (HTTP ${putRes.code})."))
+            }
+            return Result.success(fresh)
+        }
+
+        return Result.success(
+            LeaderboardEntry(
+                key = key,
+                nick = cleanNick,
+                score = 0,
+                wave = mergedWave,
+                deviceId = expectedDeviceId
+            )
+        )
     }
 
     suspend fun submitScoreIfHigher(
@@ -114,47 +148,54 @@ object LeaderboardApi {
         wave: Int
     ) {
         if (score <= 0 || nick.isBlank() || pin.isBlank()) return
-        val key = normalizeKey(nick)
+        val cleanNick = nick.trim().take(20)
+        val key = normalizeKey(cleanNick)
         if (key.length < 2) return
-        val pinHash = hashPin(nick, pin)
+        val expectedDeviceId = deriveDeviceId(cleanNick, pin)
 
-        val currentRes = net.httpRequest("GET", "$BASE_URL/$NODE/$key.json")
-        val current = if (currentRes.code in 200..299 && currentRes.body.trim() != "null") {
+        val currentRes = net.httpRequest("GET", "$BASE_URL/$GAME_PATH/$key.json")
+        val current = if (currentRes.code in 200..299 &&
+            currentRes.body.trim() != "null" &&
+            currentRes.body.trim().startsWith("{")
+        ) {
             parseSingleObject(key, currentRes.body)
         } else {
             null
         }
-        if (current != null && current.pinHash.isNotBlank() && current.pinHash != pinHash) return
+        if (current != null && current.deviceId.isNotBlank() && current.deviceId != expectedDeviceId) return
         if (current != null && current.score >= score) return
 
         val updated = LeaderboardEntry(
             key = key,
-            nick = current?.nick?.ifBlank { nick.trim() } ?: nick.trim(),
+            nick = current?.nick?.ifBlank { cleanNick } ?: cleanNick,
             score = score,
-            wave = maxOf(wave, current?.wave ?: 1),
-            pinHash = pinHash
+            wave = maxOf(1, maxOf(wave, current?.wave ?: 1)),
+            deviceId = expectedDeviceId
         )
-        net.httpRequest("PUT", "$BASE_URL/$NODE/$key.json", toJson(updated))
+        net.httpRequest("PUT", "$BASE_URL/$GAME_PATH/$key.json", toJson(updated))
     }
 
     suspend fun deleteAccount(net: PlatformNetStorage, nick: String, pin: String): Boolean {
         val key = normalizeKey(nick)
         if (key.isBlank()) return false
-        val expectedHash = hashPin(nick, pin)
-        val existingRes = net.httpRequest("GET", "$BASE_URL/$NODE/$key.json")
-        if (existingRes.code in 200..299 && existingRes.body.trim() != "null") {
+        val expectedDeviceId = deriveDeviceId(nick, pin)
+        val existingRes = net.httpRequest("GET", "$BASE_URL/$GAME_PATH/$key.json")
+        if (existingRes.code in 200..299 &&
+            existingRes.body.trim() != "null" &&
+            existingRes.body.trim().startsWith("{")
+        ) {
             val parsed = parseSingleObject(key, existingRes.body)
-            if (parsed != null && parsed.pinHash.isNotBlank() && parsed.pinHash != expectedHash) {
+            if (parsed != null && parsed.deviceId.isNotBlank() && parsed.deviceId != expectedDeviceId) {
                 return false
             }
         }
-        val del = net.httpRequest("DELETE", "$BASE_URL/$NODE/$key.json")
+        val del = net.httpRequest("DELETE", "$BASE_URL/$GAME_PATH/$key.json")
         return del.code in 200..299
     }
 
     private fun toJson(e: LeaderboardEntry): String {
         val safeNick = e.nick.replace("\\", "\\\\").replace("\"", "\\\"")
-        return """{"nick":"$safeNick","score":${e.score},"wave":${e.wave},"pinHash":"${e.pinHash}"}"""
+        return """{"name":"$safeNick","nick":"$safeNick","score":${e.score},"wave":${e.wave},"deviceId":"${e.deviceId}"}"""
     }
 
     private fun parseEntriesMap(json: String): List<LeaderboardEntry> {
@@ -180,11 +221,11 @@ object LeaderboardApi {
     }
 
     private fun parseSingleObject(key: String, obj: String): LeaderboardEntry? {
-        val nick = extractJsonString(obj, "nick") ?: return null
+        val nick = extractJsonString(obj, "nick") ?: extractJsonString(obj, "name") ?: key
         val score = extractJsonInt(obj, "score") ?: 0
         val wave = extractJsonInt(obj, "wave") ?: 1
-        val pinHash = extractJsonString(obj, "pinHash") ?: ""
-        return LeaderboardEntry(key = key, nick = nick, score = score, wave = wave, pinHash = pinHash)
+        val deviceId = extractJsonString(obj, "deviceId") ?: extractJsonString(obj, "pinHash") ?: ""
+        return LeaderboardEntry(key = key, nick = nick, score = score, wave = wave, deviceId = deviceId)
     }
 
     private fun extractJsonString(obj: String, field: String): String? {

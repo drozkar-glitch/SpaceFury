@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.sin
 
@@ -44,6 +45,7 @@ fun VectorArcadeScreen(
     modifier: Modifier = Modifier
 ) {
     val tick = engine.frameTick
+    val timeSec = engine.elapsedSec
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
@@ -61,7 +63,6 @@ fun VectorArcadeScreen(
 
             fun mapPt(ax: Float, ay: Float): Offset = Offset(ox + ax * scale, oy + ay * scale)
 
-            // Hvězdný prach v pozadí CRT obrazovky
             for (s in engine.stars) {
                 val c = when (s.colorCode) {
                     0 -> VecCyan
@@ -72,7 +73,6 @@ fun VectorArcadeScreen(
                 drawCircle(c, radius = 1.6f * scale.coerceAtLeast(0.5f), center = mapPt(s.x, s.y))
             }
 
-            // Vektorové ikony zbývajících životů (malá písmena A vpravo nahoře)
             for (i in 0 until engine.lives) {
                 val lx = SpaceFuryEngine.ARENA_W - 44f - i * 34f
                 val ly = 42f
@@ -88,11 +88,10 @@ fun VectorArcadeScreen(
                     primary = null,
                     secondary = null,
                     crossbarBlinkState = 0,
-                    frameTick = tick
+                    timeSec = timeSec
                 )
             }
 
-            // Vektorová hlava mimozemského velitele Zorgona (Intro, Taunt, Game Over)
             if (engine.phase == GamePhase.COMMANDER_INTRO ||
                 engine.phase == GamePhase.COMMANDER_TAUNT ||
                 engine.phase == GamePhase.GAME_OVER
@@ -101,20 +100,18 @@ fun VectorArcadeScreen(
                     ox = ox,
                     oy = oy,
                     scale = scale,
-                    timeSec = engine.elapsedSec,
+                    timeSec = timeSec,
                     isGameOver = engine.phase == GamePhase.GAME_OVER
                 )
             }
 
-            // Dokovací moduly mezi koly
             if (engine.phase == GamePhase.DOCKING) {
                 for (pod in engine.dockingPods) {
                     if (!pod.available) continue
-                    drawDockingPodVector(pod, ox, oy, scale)
+                    drawDockingPodVector(pod, ox, oy, scale, timeSec)
                 }
             }
 
-            // Přilétající části nepřátelských lodí před složením
             for (part in engine.enemyParts) {
                 if (!part.isRogue && !part.arrived) {
                     drawGlowSeg(
@@ -128,12 +125,10 @@ fun VectorArcadeScreen(
                 drawEnemyPartVector(part, ox, oy, scale)
             }
 
-            // Složené nepřátelské křižníky
             for (enemy in engine.enemies) {
                 drawEnemyWarshipVector(enemy, ox, oy, scale)
             }
 
-            // Střely
             for (b in engine.bullets) {
                 val col = when (b.colorCode) {
                     0 -> VecCyan
@@ -141,19 +136,19 @@ fun VectorArcadeScreen(
                     2 -> VecYellow
                     else -> VecRed
                 }
-                val len = if (b.fromPlayer) 16f else 12f
-                val spd = kotlin.math.hypot(b.vx, b.vy).coerceAtLeast(1f)
+                val len = if (b.fromPlayer) 18f else 13f
+                val spd = hypot(b.vx, b.vy).coerceAtLeast(1f)
                 val tx = b.x - (b.vx / spd) * len
                 val ty = b.y - (b.vy / spd) * len
-                drawGlowSeg(mapPt(tx, ty), mapPt(b.x, b.y), col, 2.4f * scale)
+                drawGlowSeg(mapPt(tx, ty), mapPt(b.x, b.y), col, 2.5f * scale)
             }
 
-            // Hráčova raketa ve tvaru písmene A
+            // Hráčova raketa A s časově přesným blikáním spodní příčky i trysky (stejné na 60 i 120 Hz)
             if (engine.ship.alive && (engine.phase == GamePhase.COMBAT || engine.phase == GamePhase.DOCKING)) {
-                val invulnHide = engine.ship.invulnTimer > 0f && (tick / 3) % 2 == 1
+                val invulnHide = engine.ship.invulnTimer > 0f && ((timeSec * 12f).toInt() % 2 == 1)
                 if (!invulnHide || engine.ship.crossbarBlinkTimer > 0f) {
                     val blinkState = if (engine.ship.crossbarDamaged || engine.ship.crossbarBlinkTimer > 0f) {
-                        if ((tick / 3) % 2 == 0) 1 else 2
+                        if ((timeSec * 10f).toInt() % 2 == 0) 1 else 2
                     } else {
                         0
                     }
@@ -169,12 +164,11 @@ fun VectorArcadeScreen(
                         primary = engine.ship.primaryShell,
                         secondary = engine.ship.secondaryShell,
                         crossbarBlinkState = blinkState,
-                        frameTick = tick
+                        timeSec = timeSec
                     )
                 }
             }
 
-            // Vektorové úlomky explozí a rozpadu písmene A
             for (d in engine.debris) {
                 val alpha = (d.life / d.maxLife).coerceIn(0f, 1f)
                 val col = when (d.colorCode) {
@@ -190,7 +184,6 @@ fun VectorArcadeScreen(
             }
         }
 
-        // Horní vektorový HUD
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -221,7 +214,6 @@ fun VectorArcadeScreen(
             )
         }
 
-        // Dokovací nápověda a odpočet
         if (engine.phase == GamePhase.DOCKING) {
             Column(
                 modifier = Modifier
@@ -247,7 +239,6 @@ fun VectorArcadeScreen(
             }
         }
 
-        // Hláška mimozemského velitele
         if (engine.phase == GamePhase.COMMANDER_INTRO ||
             engine.phase == GamePhase.COMMANDER_TAUNT ||
             engine.phase == GamePhase.GAME_OVER
@@ -309,7 +300,7 @@ private fun DrawScope.drawPlayerShipVector(
     primary: ShellType?,
     secondary: ShellType?,
     crossbarBlinkState: Int,
-    frameTick: Int
+    timeSec: Float
 ) {
     val rad = angleDeg * (PI.toFloat() / 180f)
     val cosA = cos(rad)
@@ -325,7 +316,6 @@ private fun DrawScope.drawPlayerShipVector(
 
     val lineW = 2.3f * arenaScale
 
-    // Připojené přídavné bojové pláště kolem rakety A
     val hasSpread = primary == ShellType.SPREAD || secondary == ShellType.SPREAD
     val hasCannon = primary == ShellType.CANNON || secondary == ShellType.CANNON
     val hasDual = primary == ShellType.DUAL_AXIS || secondary == ShellType.DUAL_AXIS
@@ -353,28 +343,22 @@ private fun DrawScope.drawPlayerShipVector(
         drawGlowSeg(tr(-25f, 5f), tr(-14f, 11f), VecYellow, lineW)
     }
 
-    // Dvě šikmé nožky čistého písmene A
     val nose = tr(22f, 0f)
     val leftFoot = tr(-18f, -14f)
     val rightFoot = tr(-18f, 14f)
     drawGlowSeg(nose, leftFoot, VecCyan, lineW * 1.1f)
     drawGlowSeg(nose, rightFoot, VecCyan, lineW * 1.1f)
 
-    // Spodní příčka v písmenu A (po zásahu výrazně bliká!)
     val barLeft = tr(-9f, -9.8f)
     val barRight = tr(-9f, 9.8f)
     when (crossbarBlinkState) {
         0 -> drawGlowSeg(barLeft, barRight, VecYellow, lineW * 1.15f)
-        1 -> drawGlowSeg(barLeft, barRight, VecRed, lineW * 1.55f)
-        else -> {
-            // Ve sudé fázi blikání příčka pohasne přesně jako na vektorovém automatu
-            drawGlowSeg(barLeft, barRight, VecYellow.copy(alpha = 0.16f), lineW * 0.8f, withGlow = false)
-        }
+        1 -> drawGlowSeg(barLeft, barRight, VecRed, lineW * 1.6f)
+        else -> drawGlowSeg(barLeft, barRight, VecYellow.copy(alpha = 0.14f), lineW * 0.8f, withGlow = false)
     }
 
-    // Blikající plamen trysky pod spodní příčkou písmene A při tahu motoru
-    if (isThrusting && frameTick % 2 == 0) {
-        val jetLen = if ((frameTick / 2) % 2 == 0) -26f else -21f
+    if (isThrusting && ((timeSec * 24f).toInt() % 2 == 0)) {
+        val jetLen = if ((timeSec * 12f).toInt() % 2 == 0) -27f else -21f
         val jL = tr(-9f, -5.2f)
         val jR = tr(-9f, 5.2f)
         val jTip = tr(jetLen, 0f)
@@ -387,7 +371,8 @@ private fun DrawScope.drawDockingPodVector(
     pod: DockingPod,
     ox: Float,
     oy: Float,
-    scale: Float
+    scale: Float,
+    timeSec: Float
 ) {
     val pulse = 1f + 0.10f * sin(pod.pulsePhase)
     val cx = ox + pod.x * scale
@@ -399,7 +384,6 @@ private fun DrawScope.drawDockingPodVector(
         ShellType.DUAL_AXIS -> VecYellow
     }
 
-    // Osmiúhelníkový dokovací prstenec
     var prev: Offset? = null
     for (i in 0..8) {
         val a = (i * 45.0) * (PI / 180.0)
@@ -410,7 +394,6 @@ private fun DrawScope.drawDockingPodVector(
         prev = pt
     }
 
-    // Ukázka tvaru zbraňového pláště uvnitř doku
     drawPlayerShipVector(
         cx = pod.x,
         cy = pod.y,
@@ -423,7 +406,7 @@ private fun DrawScope.drawDockingPodVector(
         primary = pod.shellType,
         secondary = null,
         crossbarBlinkState = 0,
-        frameTick = 0
+        timeSec = timeSec
     )
 }
 
@@ -543,7 +526,7 @@ private fun DrawScope.drawAlienCommanderHead(
 ) {
     val cx = ox + SpaceFuryEngine.ARENA_W * 0.5f * scale
     val cy = oy + SpaceFuryEngine.ARENA_H * 0.44f * scale
-    val jawOpen = (6f + 12f * ((sin(timeSec * 20f) + 1f) * 0.5f)) * scale
+    val jawOpen = (6f + 12f * ((sin(timeSec * 16f) + 1f) * 0.5f)) * scale
     val skin = if (isGameOver) VecRed else VecGreen
     val eyes = if (isGameOver) VecYellow else VecRed
     val crest = VecCyan
@@ -551,7 +534,6 @@ private fun DrawScope.drawAlienCommanderHead(
 
     fun pt(dx: Float, dy: Float): Offset = Offset(cx + dx * scale, cy + dy * scale)
 
-    // Lebka a lícní hrany mimozemského velitele ze Space Fury (1981)
     val crown = pt(0f, -150f)
     val templeL = pt(-115f, -85f)
     val templeR = pt(115f, -85f)
@@ -567,14 +549,12 @@ private fun DrawScope.drawAlienCommanderHead(
     drawGlowSeg(cheekL, jawHingeL, skin, w)
     drawGlowSeg(cheekR, jawHingeR, skin, w)
 
-    // Rohy / antény na hlavě
     drawGlowSeg(pt(-55f, -118f), pt(-142f, -195f), crest, w)
     drawGlowSeg(pt(-142f, -195f), pt(-95f, -96f), crest, w)
     drawGlowSeg(pt(55f, -118f), pt(142f, -195f), crest, w)
     drawGlowSeg(pt(142f, -195f), pt(95f, -96f), crest, w)
     drawGlowSeg(pt(0f, -150f), pt(0f, -65f), crest, w * 0.85f)
 
-    // Šikmé planoucí oči
     drawGlowSeg(pt(-88f, -42f), pt(-24f, -18f), eyes, w * 1.2f)
     drawGlowSeg(pt(-24f, -18f), pt(-68f, 4f), eyes, w * 1.2f)
     drawGlowSeg(pt(-68f, 4f), pt(-88f, -42f), eyes, w * 1.2f)
@@ -583,7 +563,6 @@ private fun DrawScope.drawAlienCommanderHead(
     drawGlowSeg(pt(24f, -18f), pt(68f, 4f), eyes, w * 1.2f)
     drawGlowSeg(pt(68f, 4f), pt(88f, -42f), eyes, w * 1.2f)
 
-    // Pohyblivá vektorová čelist mluvící v rytmu syntetizátoru
     val upperLipL = pt(-58f, 58f)
     val upperLipM = pt(0f, 48f)
     val upperLipR = pt(58f, 58f)
